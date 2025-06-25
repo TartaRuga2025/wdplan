@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Withdrawal Plan Calculator</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0066cc">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f7f8;
+            color: #333;
+        }
+        .container {
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .calculator {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+        }
+        h1 {
+            text-align: center;
+            color: #0066cc;
+            margin-bottom: 20px;
+            font-size: 1.8em;
+        }
+        label {
+            display: block;
+            margin: 12px 0 6px;
+            font-weight: bold;
+            font-size: 1em;
+        }
+        input[type="number"] {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.2em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 16px;
+            width: 100%;
+            font-size: 1.2em;
+            border-radius: 5px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        button:hover { background: #004999; }
+        .results {
+            margin-top: 30px;
+            background: #fafafa;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .result-item {
+            margin-bottom: 16px;
+            font-size: 1.1em;
+        }
+        .positive { color: green; font-weight: bold; }
+        .negative { color: red; font-weight: bold; }
+        canvas {
+            margin-top: 20px;
+            max-width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="calculator">
+            <h1>Withdrawal Plan</h1>
+            <label for="startPrice">Price per Kg today (£):</label>
+            <input type="number" id="startPrice" min="600" max="1500" step="5">
+            <label for="startKG">Kilos held today:</label>
+            <input type="number" id="startKG" min="10" max="100">
+            <label for="planLength">Plan length (years):</label>
+            <input type="number" id="planLength" min="1" max="25">
+            <label for="growth">Annual growth (%):</label>
+            <input type="number" id="growth" min="-5" max="25" step="0.5">
+            <label for="monthlyReq">Monthly requirement (£):</label>
+            <input type="number" id="monthlyReq" min="100" max="2000" step="10">
+            <button id="calculateBtn" onclick="calculate()">CALCULATE</button>
+            <div class="results" id="results" style="display:none;">
+                <h3>Results:</h3>
+                <div id="output"></div>
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('service-worker.js');
+            });
+        }
+        window.addEventListener('load', () => {
+            ['startPrice','startKG','planLength','growth','monthlyReq'].forEach(id => {
+                const stored = localStorage.getItem(id);
+                if (stored !== null) document.getElementById(id).value = stored;
+            });
+        });
+        ['startPrice','startKG','planLength','growth','monthlyReq'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                localStorage.setItem(id, document.getElementById(id).value);
+            });
+        });
+        let chart = null;
+        function calculate() {
+            const startPrice = parseFloat(document.getElementById("startPrice").value);
+            const startKG = parseFloat(document.getElementById("startKG").value);
+            const planLength = parseInt(document.getElementById("planLength").value);
+            const growth = parseFloat(document.getElementById("growth").value);
+            const monthlyReq = parseFloat(document.getElementById("monthlyReq").value);
+            if (isNaN(startPrice) || isNaN(startKG) || isNaN(planLength) || isNaN(growth) || isNaN(monthlyReq)) {
+                alert("Please fill in all fields correctly."); return;
+            }
+            const startVal = startPrice * startKG;
+            const endPrice = startPrice + (startPrice * (growth/100) * planLength);
+            const avgPrice = (startPrice + endPrice) / 2;
+            const yearlyReq = monthlyReq * 12;
+            const totalReq = yearlyReq * planLength;
+            const yearlyKGreq = yearlyReq / avgPrice;
+            const totalKGWD = yearlyKGreq * planLength;
+            const totalResKG = startKG - totalKGWD;
+            const totalResVal = totalResKG * endPrice;
+            const wdPlusRes = totalReq + totalResVal;
+            const profitLoss = wdPlusRes - startVal;
+            const profitLossPercent = (profitLoss / startVal) * 100;
+            document.getElementById("results").style.display = 'block';
+            document.getElementById("output").innerHTML = `
+                <div class="result-item">Initial Value: £${startVal.toFixed(0)}</div>
+                <div class="result-item">Total withdrawn: £${totalReq.toFixed(0)}</div>
+                <div class="result-item">Kg held at end: ${totalResKG.toFixed(1)}</div>
+                <div class="result-item">Value: £${totalResVal.toFixed(0)}</div>
+                <div class="result-item">P/L: <span class="${profitLoss>=0 ? 'positive':'negative'}">£${profitLoss.toFixed(0)}</span></div>
+                <div class="result-item">P/L %: <span class="${profitLossPercent>=0 ? 'positive':'negative'}">${profitLossPercent.toFixed(1)}%</span></div>
+            `;
+            const years = Array.from({length: planLength+1}, (_, i) => i);
+            const prices = years.map(y => (startPrice + (startPrice * (growth/100) * y)).toFixed(2));
+            if (chart) chart.destroy();
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: years.map(y => `Year ${y}`),
+                    datasets: [{
+                        label: 'Projected Price per Kg (£)',
+                        data: prices,
+                        borderColor: '#0066cc',
+                        backgroundColor: 'rgba(0,102,204,0.1)',
+                        tension: 0.2,
+                        fill: true
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+            });
+            document.getElementById("results").scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
